@@ -21,6 +21,9 @@ void main() {
     final game = SeaBattle(n, vsBot);
     final winner = game.play();
 
+    // Сохраняем статистику
+    game.saveStatistics(winner);
+
     if (winner == 'player') playerWins++;
     else enemyWins++;
 
@@ -30,7 +33,7 @@ void main() {
     if ((stdin.readLineSync() ?? '').toLowerCase() != 'y') break;
   }
 
-  print('\nСпасибо за игру! До новых морских побед ');
+  print('\nСпасибо за игру! ');
 }
 
 class SeaBattle {
@@ -44,6 +47,14 @@ class SeaBattle {
 
   int playerShips = 0;
   int enemyShips = 0;
+
+  // Добавлена статистика
+  int playerHits = 0;
+  int playerMisses = 0;
+  int enemyHits = 0;
+  int enemyMisses = 0;
+  int totalShots = 0;
+  DateTime gameStartTime = DateTime.now();
 
   SeaBattle(this.size, this.vsBot) {
     playerField = List.generate(size, (_) => List.filled(size, '~'));
@@ -65,8 +76,7 @@ class SeaBattle {
   void _placeShips(List<List<String>> field) {
     int ships = size ~/ 2;
     int placed = 0;
-    while (placed < ships) 
-    {
+    while (placed < ships) {
       int x = _rnd.nextInt(size);
       int y = _rnd.nextInt(size);
       if (field[x][y] == '~') {
@@ -152,14 +162,17 @@ class SeaBattle {
         break;
       }
 
+      totalShots++;
       if (enemyField[x][y] == '■') {
         print(' Попадание!');
         enemyField[x][y] = 'X';
         enemyVisible[x][y] = 'X';
         enemyShips--;
+        playerHits++;
       } else {
         print(' Мимо!');
         enemyVisible[x][y] = '*';
+        playerMisses++;
       }
 
       if (enemyShips == 0) break;
@@ -195,13 +208,16 @@ class SeaBattle {
 
   //  Выстрел противника
   void _enemyShoot(int x, int y) {
+    totalShots++;
     if (playerField[x][y] == '■') {
       print(' Противник попал!');
       playerField[x][y] = 'X';
       playerShips--;
+      enemyHits++;
     } else {
       print(' Противник промахнулся.');
       playerField[x][y] = '*';
+      enemyMisses++;
     }
   }
 
@@ -213,13 +229,16 @@ class SeaBattle {
       y = _rnd.nextInt(size);
     } while (playerField[x][y] == 'X' || playerField[x][y] == '*');
 
+    totalShots++;
     if (playerField[x][y] == '■') {
       print(' Робот стреляет в (${x + 1}, ${y + 1}) — попал!');
       playerField[x][y] = 'X';
       playerShips--;
+      enemyHits++;
     } else {
       print(' Робот стреляет в (${x + 1}, ${y + 1}) — мимо.');
       playerField[x][y] = '*';
+      enemyMisses++;
     }
   }
 
@@ -240,5 +259,71 @@ class SeaBattle {
       print('$playerRow'.padRight(25) + '$enemyRow');
     }
   }
+
+  // Добавлен метод сохранения статистики
+  void saveStatistics(String winner) {
+    try {
+      // Создаем каталог для статистики
+      final statsDir = Directory('game_statistics');
+      if (!statsDir.existsSync()) {
+        statsDir.createSync();
+      }
+
+      // Создаем имя файла с датой и временем
+      final now = DateTime.now();
+      final fileName = 'sea_battle_${now.year}${now.month.toString().padLeft(2, '0')}${now.day.toString().padLeft(2, '0')}_${now.hour.toString().padLeft(2, '0')}${now.minute.toString().padLeft(2, '0')}.txt';
+      final filePath = 'game_statistics/$fileName';
+
+      // Рассчитываем точность стрельбы
+      final playerAccuracy = playerHits + playerMisses > 0 
+          ? (playerHits / (playerHits + playerMisses) * 100).toStringAsFixed(1)
+          : '0.0';
+      
+      final enemyAccuracy = enemyHits + enemyMisses > 0
+          ? (enemyHits / (enemyHits + enemyMisses) * 100).toStringAsFixed(1)
+          : '0.0';
+
+      // Создаем содержимое файла со статистикой
+      final statsContent = '''
+=== СТАТИСТИКА МОРСКОГО БОЯ ===
+
+ОБЩАЯ ИНФОРМАЦИЯ:
+- Дата игры: ${now.day}.${now.month}.${now.year}
+- Размер поля: $size x $size
+- Режим: ${vsBot ? 'Против компьютера' : 'Против игрока'}
+- Победитель: ${winner == 'player' ? 'ИГРОК' : 'ПРОТИВНИК'}
+
+СТАТИСТИКА ИГРОКА:
+- Уничтожено кораблей противника: ${size ~/ 2 - enemyShips}
+- Потеряно кораблей: ${size ~/ 2 - playerShips}
+- Осталось кораблей: $playerShips/${size ~/ 2}
+- Попадания: $playerHits
+- Промахи: $playerMisses
+- Точность стрельбы: $playerAccuracy%
+
+СТАТИСТИКА ПРОТИВНИКА:
+- Уничтожено кораблей игрока: ${size ~/ 2 - playerShips}
+- Осталось кораблей: $enemyShips/${size ~/ 2}
+- Попадания: $enemyHits
+- Промахи: $enemyMisses
+- Точность стрельбы: $enemyAccuracy%
+
+ОБЩАЯ СТАТИСТИКА:
+- Всего выстрелов: $totalShots
+- Всего кораблей уничтожено: ${(size ~/ 2 - playerShips) + (size ~/ 2 - enemyShips)}
+''';
+
+      // Записываем статистику в файл
+      final file = File(filePath);
+      file.writeAsStringSync(statsContent);
+      
+      print('\nСтатистика игры сохранена в файл: $filePath');
+      print(statsContent);
+
+    } catch (e) {
+      print('Ошибка при сохранении статистики: $e');
+    }
+  }
 }
+
 
